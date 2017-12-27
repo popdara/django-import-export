@@ -175,10 +175,15 @@ class Diff(object):
         self.left = self._export_resource_fields(resource, instance)
         self.right = []
         self.new = new
+        self.is_change = False
 
     def compare_with(self, resource, instance, dry_run=False):
         self.right = self._export_resource_fields(resource, instance)
 
+    def compare_inside(self, resource, instance, dry_run=False):
+        self.compare_with(resource, instance, dry_run)
+        self.is_change = self.left != self.right
+ 
     def as_html(self):
         data = []
         dmp = diff_match_patch()
@@ -445,8 +450,10 @@ class Resource(six.with_metaclass(DeclarativeMetaclass)):
             else:
                 row_result.import_type = RowResult.IMPORT_TYPE_UPDATE
             row_result.new_record = new
-            original = deepcopy(instance)
+            original = instance
             diff = Diff(self, original, new)
+            self.import_obj(instance, row, dry_run)
+            diff.compare_inside(self, instance, dry_run)
             if self.for_delete(row, instance):
                 if new:
                     row_result.import_type = RowResult.IMPORT_TYPE_SKIP
@@ -457,7 +464,7 @@ class Resource(six.with_metaclass(DeclarativeMetaclass)):
                     diff.compare_with(self, None, dry_run)
             else:
                 self.import_obj(instance, row, dry_run)
-                if self.skip_row(instance, original):
+                if not diff.is_change:
                     row_result.import_type = RowResult.IMPORT_TYPE_SKIP
                 else:
                     self.save_instance(instance, using_transactions, dry_run)
